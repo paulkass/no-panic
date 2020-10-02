@@ -1,6 +1,7 @@
 use std::fs;
 use std::process::Command;
 use std::sync::Once;
+use regex::Regex;
 
 pub fn setup() {
     static BUILD: Once = Once::new();
@@ -23,18 +24,43 @@ pub fn contains_panic(name: &str, code: &str) -> bool {
     let rs = tempdir.path().join(format!("{}.rs", name));
     fs::write(&rs, format!("{}{}", prelude, code)).unwrap();
 
-    let status = Command::new("rustc")
-        .arg("--crate-name")
-        .arg(name)
-        .arg(rs)
-        .arg("--edition=2018")
-        .arg("-C")
-        .arg("opt-level=3")
-        .arg("--emit=asm")
-        .arg("--out-dir")
-        .arg(tempdir.path())
-        .arg("--extern")
-        .arg("no_panic=target/debug/libno_panic.so")
+    let base_command_vec = vec!(
+        "--crate-name",
+        name,
+        rs.to_str().unwrap(),
+        "--edition=2018",
+        "-C",
+        "opt-level=3",
+        "--emit=asm",
+        "--out-dir",
+        tempdir.path().to_str().unwrap(),
+        // "--extern",
+        // "no_panic=target/debug/libno_panic.so",
+    );
+
+    let mut lib_vec = vec!();
+    let regex = Regex::new(r"^lib(.+?)-[[:alnum:]]+\.rlib").unwrap();
+
+    for entry in std::fs::read_dir("target/debug/deps").unwrap() {
+       let name = entry.unwrap().file_name().into_string().unwrap();
+       if name.ends_with(".rlib") {
+            lib_vec.push(String::from("--extern"));
+            let lib_name = regex.captures(&name);
+            let lib_name = lib_name.unwrap().get(1).map_or("", |m| m.as_str());
+            lib_vec.push(format!("{}={}{}", &lib_name, "target/debug/deps/", &name));
+       }
+    }
+
+    let mut arg_vec = vec!();
+    arg_vec.extend(base_command_vec);
+    for x in lib_vec.as_slice() {
+        arg_vec.push(x);
+    }
+    println!("{:?}", arg_vec.join(r" "));
+
+    let mut status = Command::new("rustc");
+    let status = status.args(arg_vec);
+    let status = status
         .status()
         .expect("failed to execute rustc");
     assert!(status.success());

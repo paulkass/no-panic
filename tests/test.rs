@@ -165,6 +165,22 @@ assert_no_panic! {
             println!("{}", s.get_mut());
         }
     }
+
+    /*
+    mod test_async_fn {
+        use std::io::Error;
+
+        #[no_panic]
+        async fn run() -> Result<u8, Error> {
+            Ok(8)
+        }
+
+        #[tokio::main]
+        async fn main() {
+            println!("{}", run().await);
+        }
+    }
+    */
 }
 
 assert_link_error! {
